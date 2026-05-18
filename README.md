@@ -229,5 +229,5 @@ VITE_SUPABASE_ANON_KEY → your-anon-key
 ---
 
 ## Built By
-Hadi (Abdulhadi Hassan) — Odoo Developer & AI Engineer based in Doha, Qatar.
-- GitHub: Abdulhadi (https://github.com/hadihassan123)
+Abdulhadi Hassan — Odoo Developer & AI Engineer based in Doha, Qatar.
+- GitHub: (https://github.com/hadihassan123)
