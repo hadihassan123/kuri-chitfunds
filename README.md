@@ -187,4 +187,4 @@ VITE_API_URL           → auto-filled from kuri-backend
 ---
 
 ## Built By
-Hadi (Abdulhadi Hassan) — Odoo Developer & AI Engineer based in Doha, Qatar.
+Abdulhadi Hassan — Odoo Developer & AI Engineer based in Doha, Qatar.
