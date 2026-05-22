@@ -36,3 +36,4 @@ __pycache__/
 
 # Render file in wrong place
 backend/render.yaml
+public/_redirects
