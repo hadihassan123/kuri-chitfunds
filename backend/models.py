@@ -31,7 +31,8 @@ class ChitFund(Base):
     organizer_wins_first = Column(Boolean, default=True)
     status = Column(Enum(ChitStatus), default=ChitStatus.DRAFT)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+    user_id = Column(String, nullable=True)  # Supabase auth user UUID
+
     members = relationship("Member", back_populates="chit_fund", cascade="all, delete-orphan")
     draws = relationship("DrawResult", back_populates="chit_fund", cascade="all, delete-orphan")
 
@@ -47,7 +48,8 @@ class Member(Base):
     country = Column(String(100), nullable=False)
     has_won = Column(Boolean, default=False)
     won_in_month = Column(Integer, nullable=True)
-    
+    user_id = Column(String, nullable=True)  # Supabase auth user UUID (null if joined without account)
+
     chit_fund = relationship("ChitFund", back_populates="members")
 
 
@@ -60,5 +62,5 @@ class DrawResult(Base):
     winner_id = Column(String, nullable=False)
     winner_name = Column(String(100), nullable=False)
     drawn_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     chit_fund = relationship("ChitFund", back_populates="draws")

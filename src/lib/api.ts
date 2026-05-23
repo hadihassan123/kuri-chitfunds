@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const STORAGE_KEY = 'chitfunds_data';
-const FASTAPI_TIMEOUT_MS = 5000; // if Render takes >5s to wake, skip to Supabase
+const FASTAPI_TIMEOUT_MS = 5000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -13,7 +13,6 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 15);
 }
 
-/** Fetch with timeout — prevents waiting forever for sleeping Render instance */
 async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FASTAPI_TIMEOUT_MS);
@@ -24,6 +23,28 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
   } catch (err) {
     clearTimeout(timer);
     throw err;
+  }
+}
+
+/** Get auth headers with Supabase JWT token */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase!.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  } catch (_) {}
+  return headers;
+}
+
+/** Get current logged-in user ID */
+async function getCurrentUserId(): Promise<string | null> {
+  try {
+    const { data: { session } } = await supabase!.auth.getSession();
+    return session?.user?.id ?? null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -88,7 +109,6 @@ function saveChits(chits: ChitFund[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(chits));
 }
 
-/** Sync cloud data into localStorage so offline has latest snapshot */
 function syncToLocal(chits: ChitFund[]): void {
   saveChits(chits);
 }
@@ -155,6 +175,7 @@ async function supabaseGetChit(id: string): Promise<ChitFund | null> {
 async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund> {
   if (!supabase) throw new Error('Supabase not configured');
 
+  const userId = await getCurrentUserId();
   const chitId = generateId();
   const organizerId = generateId();
 
@@ -170,6 +191,7 @@ async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund>
     organizer_wins_first: payload.organizerWinsFirst,
     status: 'draft',
     current_month: 0,
+    user_id: userId,  // ← link to logged-in user
   });
   if (chitError) throw chitError;
 
@@ -180,6 +202,7 @@ async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund>
     email: payload.organizerEmail,
     country: payload.organizerCountry,
     has_won: false,
+    user_id: userId,  // ← organizer is also a member
   });
   if (memberError) throw memberError;
 
@@ -188,6 +211,8 @@ async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund>
 
 async function supabaseAddMember(chitId: string, payload: AddMemberPayload): Promise<Member> {
   if (!supabase) throw new Error('Supabase not configured');
+
+  const userId = await getCurrentUserId(); // null if not logged in
 
   const chit = await supabaseGetChit(chitId);
   if (!chit) throw new Error('Chit not found');
@@ -203,6 +228,7 @@ async function supabaseAddMember(chitId: string, payload: AddMemberPayload): Pro
     phone: payload.phone,
     country: payload.country,
     has_won: false,
+    user_id: userId,  // ← null if joined without account
   });
   if (error) throw error;
 
@@ -298,8 +324,9 @@ async function supabaseConductDraw(chitId: string): Promise<DrawResult> {
 // ─── FastAPI helpers (Tier 1) ─────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     ...options,
   });
   if (!res.ok) {
