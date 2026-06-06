@@ -77,6 +77,22 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
   const [createdLink, setCreatedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      monthlyAmount: 10000,
+      currency: 'INR',
+      totalMembers: 10,
+      durationMonths: 10,
+      organizerName: '',
+      organizerEmail: '',
+      organizerCountry: 'India',
+      organizerWinsFirst: true,
+    },
+  });
+
   useEffect(() => {
     const loadUser = async () => {
       const {
@@ -98,22 +114,6 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
 
     if (open) loadUser();
   }, [open]);
-
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-      monthlyAmount: 10000,
-      currency: 'INR',
-      totalMembers: 10,
-      durationMonths: 10,
-      organizerName: '',
-      organizerEmail: '',
-      organizerCountry: 'India',
-      organizerWinsFirst: true,
-    },
-  });
 
   const getShareableLink = (chitId: string) => {
     return `${window.location.origin}/join/${chitId}`;
