@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState,useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Coins, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function Register() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -18,7 +19,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!name ||!email || !password || !confirmPassword) {
       toast({ title: 'Missing fields', description: 'Please fill in all fields.', variant: 'destructive' });
       return;
     }
@@ -35,7 +36,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const { error } = await supabase!.auth.signUp({ email, password });
+      const { error } = await supabase!.auth.signUp({ email, password,options: { data: { name } } });
       if (error) throw error;
       toast({ title: 'Account created!', description: 'You are now logged in.' });
       navigate('/');
@@ -62,6 +63,16 @@ export default function Register() {
         </CardHeader>
 
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder="John Doe"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input

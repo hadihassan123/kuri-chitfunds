@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect,useState } from 'react';
 import { Copy, Check, Link as LinkIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -32,6 +32,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
 
 const CURRENCIES = [
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
@@ -75,6 +76,28 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdLink, setCreatedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const {
+        data: { user },
+      } = await supabase!.auth.getUser();
+
+      if (!user) return;
+
+      form.setValue(
+        'organizerName',
+        user.user_metadata?.full_name || ''
+      );
+
+      form.setValue(
+        'organizerEmail',
+        user.email || ''
+      );
+    };
+
+    if (open) loadUser();
+  }, [open]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -338,7 +361,7 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
                   <FormItem>
                     <FormLabel>Your Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John Doe" {...field} />
+                      <Input {...field} readOnly />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -353,7 +376,7 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="john@example.com" {...field} />
+                        <Input type="email" {...field} readOnly />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
