@@ -51,4 +51,6 @@ export interface AddMemberPayload {
   email: string;
   phone?: string;
   country: string;
+  upiEnabled?: boolean;
+  upiId?: string;
 }

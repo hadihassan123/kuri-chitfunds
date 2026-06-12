@@ -62,6 +62,8 @@ const formSchema = z.object({
   organizerEmail: z.string().email('Valid email required'),
   organizerCountry: z.string().min(1, 'Select your country'),
   organizerWinsFirst: z.boolean(),
+  upiEnabled: z.boolean(),
+  upiId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -90,6 +92,8 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
       organizerEmail: '',
       organizerCountry: 'India',
       organizerWinsFirst: true,
+      upiEnabled: false,
+      upiId: '',
     },
   });
 
@@ -154,6 +158,8 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
         organizerEmail: values.organizerEmail,
         organizerCountry: values.organizerCountry,
         organizerWinsFirst: values.organizerWinsFirst,
+        upiEnabled: values.upiEnabled,
+        upiId: values.upiId,
       });
       setCreatedLink(getShareableLink(newChit.id));
     } catch (error) {

@@ -35,6 +35,28 @@ class ChitFund(Base):
 
     members = relationship("Member", back_populates="chit_fund", cascade="all, delete-orphan")
     draws = relationship("DrawResult", back_populates="chit_fund", cascade="all, delete-orphan")
+    upi_enabled = Column(Boolean, default=False)
+    upi_id = Column(String(100), nullable=True)
+
+class MonthlyPayment(Base):
+    __tablename__="monthly_payments"
+    id=Column(String,primary_key=True)
+    chit_fund_id=Column(
+        String,
+        ForeignKey("chit_funds.id")
+    )
+    member_id=Column(
+        String,
+        ForeignKey("members.id")
+    )
+    month=Column(Integer)
+    amount=Column(Integer)
+    status=Column(String)
+    marked_by=Column(String)
+    paid_at=Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
 
 
 class Member(Base):

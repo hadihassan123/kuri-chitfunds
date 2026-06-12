@@ -15,6 +15,87 @@ import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { ChitFund } from '@/types/chit';
 import { format } from 'date-fns';
+import { Payment } from '@/types/chit';
+
+// At the top, add to imports:
+
+// Add this component inside ChitDetails.tsx:
+function PaymentsTab({ chit, currentUserId }: { chit: ChitFund; currentUserId: string }) {
+  const [payments, setPayments] = useState<Payment[]>([]);
+
+  useEffect(() => {
+    api.getPayments(chit.id).then(setPayments);
+  }, [chit.id]);
+
+  const isOrganizer = chit.organizerd === currentUserId;
+  const currentMonthPayments = payments.filter(p => p.month === chit.currentMonth - 1);
+
+  const handlePayUPI = () => {
+    const upiUrl = `upi://pay?pa=${chit.organizer_upi}&pn=Kuri&am=${chit.monthly_amount}&cu=INR&tn=Kuri+Month+${chit.currentMonth - 1}`;
+    window.location.href = upiUrl;
+  };
+
+  const handleMarkPaid = async (paymentId: string) => {
+    await api.markPaid(chit.id, paymentId);
+    const updated = await api.getPayments(chit.id);
+    setPayments(updated);
+  };
+
+  const handleMarkUnpaid = async (paymentId: string) => {
+    await api.markUnpaid(chit.id, paymentId);
+    const updated = await api.getPayments(chit.id);
+    setPayments(updated);
+  };
+
+  return (
+    <div className="space-y-4">
+      {currentMonthPayments.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No payments yet. Conduct a draw first.</p>
+      ) : (
+        currentMonthPayments.map(payment => {
+          const member = chit.members.find(m => m.id === payment.member_id);
+          const isOwnPayment = member?.user_id === currentUserId;
+
+          return (
+            <div key={payment.id} className="flex items-center justify-between rounded-lg border p-4">
+              <div>
+                <p className="font-medium">{member?.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  ₹{payment.amount} — Month {payment.month}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {payment.is_paid ? (
+                  <>
+                    <span className="text-green-600 text-sm font-medium">✓ Paid</span>
+                    {isOrganizer && (
+                      <Button size="sm" variant="ghost" onClick={() => handleMarkUnpaid(payment.id)}>
+                        Undo
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {isOwnPayment && chit.organizer_upi && (
+                      <Button size="sm" onClick={handlePayUPI}>
+                        Pay via UPI
+                      </Button>
+                    )}
+                    {(isOrganizer || isOwnPayment) && (
+                      <Button size="sm" variant="outline" onClick={() => handleMarkPaid(payment.id)}>
+                        Mark as Paid
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
 
 export default function ChitDetails() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +104,7 @@ export default function ChitDetails() {
   const [loading, setLoading] = useState(true);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [drawDialogOpen, setDrawDialogOpen] = useState(false);
+  const currentUserId = localStorage.getItem('userId') || '';
 
   const loadChit = async () => {
     if (!id) return;
@@ -237,6 +319,8 @@ export default function ChitDetails() {
           </CardContent>
         </Card>
 
+        
+
         {/* Tabs */}
         <Tabs defaultValue="members" className="space-y-6">
           <TabsList>
@@ -252,6 +336,11 @@ export default function ChitDetails() {
           <TabsContent value="members">
             <MembersList chit={chit} onUpdate={loadChit} />
           </TabsContent>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+            // ...
+            <TabsContent value="payments">
+              <PaymentsTab chit={chit} currentUserId={currentUserId} />
+            </TabsContent>
 
           <TabsContent value="history">
             <DrawHistory chit={chit} />
