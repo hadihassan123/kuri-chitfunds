@@ -62,8 +62,9 @@ const formSchema = z.object({
   organizerEmail: z.string().email('Valid email required'),
   organizerCountry: z.string().min(1, 'Select your country'),
   organizerWinsFirst: z.boolean(),
-  upiEnabled: z.boolean(),
-  upiId: z.string().optional(),
+  organizerUpi: z.string().min(5, 'Enter a valid UPI ID').regex(/^[\w.\-]+@[\w]+$/, 'Invalid UPI ID format e.g. name@upi'),
+  //upiEnabled: z.boolean(),
+ // upiId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -92,8 +93,9 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
       organizerEmail: '',
       organizerCountry: 'India',
       organizerWinsFirst: true,
-      upiEnabled: false,
-      upiId: '',
+      organizerUpi: '',
+      //upiEnabled: false,
+      //upiId: '',
     },
   });
 
@@ -158,8 +160,9 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
         organizerEmail: values.organizerEmail,
         organizerCountry: values.organizerCountry,
         organizerWinsFirst: values.organizerWinsFirst,
-        upiEnabled: values.upiEnabled,
-        upiId: values.upiId,
+        organizerUpi: values.organizerUpi,
+        //upiEnabled: values.upiEnabled,
+        //upiId: values.upiId,
       });
       setCreatedLink(getShareableLink(newChit.id));
     } catch (error) {
@@ -369,6 +372,23 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
                     <FormControl>
                       <Input {...field} readOnly />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="organizerUpi"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your UPI ID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="yourname@upi" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Members will pay to this UPI ID. Find it in PhonePe or Google Pay.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
