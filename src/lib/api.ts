@@ -1,4 +1,4 @@
-import { ChitFund, Member, DrawResult, CreateChitPayload, AddMemberPayload } from '@/types/chit';
+import { ChitFund, Member, DrawResult, CreateChitPayload, AddMemberPayload,Payment } from '@/types/chit';
 import { supabase } from './supabase';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -91,6 +91,7 @@ function mapChit(raw: Record<string, unknown>): ChitFund {
     currentMonth: (raw.current_month ?? raw.currentMonth) as number,
     organizerId: (raw.organizer_id ?? raw.organizerId) as string,
     organizerWinsFirst: (raw.organizer_wins_first ?? raw.organizerWinsFirst) as boolean,
+    organizerUpi: (raw.organizer_upi ?? raw.organizerUpi) as string | undefined,
     status: raw.status as 'draft' | 'active' | 'completed',
     createdAt: (raw.created_at ?? raw.createdAt) as string,
     members,
@@ -188,6 +189,7 @@ async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund>
     total_members: payload.totalMembers,
     duration_months: payload.durationMonths,
     organizer_id: organizerId,
+    organizer_upi: payload.organizerUpi,
     organizer_wins_first: payload.organizerWinsFirst,
     status: 'draft',
     current_month: 0,
@@ -392,6 +394,7 @@ export const api = {
         duration_months: payload.durationMonths,
         organizer_name: payload.organizerName,
         organizer_email: payload.organizerEmail,
+        organizer_upi: payload.organizerUpi,
         organizer_country: payload.organizerCountry,
         organizer_wins_first: payload.organizerWinsFirst,
       };
@@ -439,6 +442,19 @@ export const api = {
     return newChit;
   },
 
+  getPayments: (chitId: string) =>
+  apiFetch<Payment[]>(`/api/chits/${chitId}/payments`),
+
+  markPaid: (chitId: string, paymentId: string) =>
+    apiFetch<Payment>(`/api/chits/${chitId}/payments/${paymentId}/mark-paid`, {
+      method: 'PATCH',
+    }),
+
+  markUnpaid: (chitId: string, paymentId: string) =>
+    apiFetch<Payment>(`/api/chits/${chitId}/payments/${paymentId}/mark-unpaid`, {
+      method: 'PATCH',
+    }),
+
   async addMember(chitId: string, payload: AddMemberPayload): Promise<Member> {
     // Tier 1: FastAPI
     try {
@@ -470,7 +486,7 @@ export const api = {
     saveChits(chits);
     return newMember;
   },
-
+  
   async removeMember(chitId: string, memberId: string): Promise<void> {
     // Tier 1: FastAPI
     try {
