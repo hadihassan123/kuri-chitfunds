@@ -10,7 +10,19 @@ class ChitStatusEnum(str, Enum):
     completed = "completed"
 
 
-# Member schemas
+class PaymentResponse(BaseModel):
+    id: str
+    member_id: str
+    month: int
+    amount: int
+    is_paid: bool
+    paid_at: Optional[datetime]
+    marked_by: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
 class MemberCreate(BaseModel):
     name: str
     email: EmailStr
@@ -31,7 +43,6 @@ class MemberResponse(BaseModel):
         from_attributes = True
 
 
-# Draw schemas
 class DrawResultResponse(BaseModel):
     id: str
     month: int
@@ -43,7 +54,6 @@ class DrawResultResponse(BaseModel):
         from_attributes = True
 
 
-# Chit Fund schemas
 class ChitFundCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -55,6 +65,7 @@ class ChitFundCreate(BaseModel):
     organizer_email: EmailStr
     organizer_country: str
     organizer_wins_first: bool = True
+    organizer_upi: Optional[str] = None
 
 
 class ChitFundResponse(BaseModel):
@@ -68,10 +79,12 @@ class ChitFundResponse(BaseModel):
     current_month: int
     organizer_id: str
     organizer_wins_first: bool
+    organizer_upi: Optional[str]
     status: ChitStatusEnum
     created_at: datetime
     members: List[MemberResponse]
     draws: List[DrawResultResponse]
+    payments: List[PaymentResponse]
 
     class Config:
         from_attributes = True
@@ -88,10 +101,12 @@ class ChitFundListResponse(BaseModel):
     current_month: int
     organizer_id: str
     organizer_wins_first: bool
+    organizer_upi: Optional[str]
     status: ChitStatusEnum
     created_at: datetime
     members: List[MemberResponse]
     draws: List[DrawResultResponse]
+    payments: List[PaymentResponse]
 
     class Config:
         from_attributes = True

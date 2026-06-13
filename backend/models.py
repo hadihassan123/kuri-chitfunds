@@ -29,34 +29,14 @@ class ChitFund(Base):
     current_month = Column(Integer, default=0)
     organizer_id = Column(String, nullable=False)
     organizer_wins_first = Column(Boolean, default=True)
+    organizer_upi = Column(String(100), nullable=True)
     status = Column(Enum(ChitStatus), default=ChitStatus.DRAFT)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    user_id = Column(String, nullable=True)  # Supabase auth user UUID
+    user_id = Column(String, nullable=True)
 
     members = relationship("Member", back_populates="chit_fund", cascade="all, delete-orphan")
     draws = relationship("DrawResult", back_populates="chit_fund", cascade="all, delete-orphan")
-    upi_enabled = Column(Boolean, default=False)
-    upi_id = Column(String(100), nullable=True)
-
-class MonthlyPayment(Base):
-    __tablename__="monthly_payments"
-    id=Column(String,primary_key=True)
-    chit_fund_id=Column(
-        String,
-        ForeignKey("chit_funds.id")
-    )
-    member_id=Column(
-        String,
-        ForeignKey("members.id")
-    )
-    month=Column(Integer)
-    amount=Column(Integer)
-    status=Column(String)
-    marked_by=Column(String)
-    paid_at=Column(
-        DateTime(timezone=True),
-        nullable=True
-    )
+    payments = relationship("Payment", back_populates="chit_fund", cascade="all, delete-orphan")
 
 
 class Member(Base):
@@ -70,9 +50,10 @@ class Member(Base):
     country = Column(String(100), nullable=False)
     has_won = Column(Boolean, default=False)
     won_in_month = Column(Integer, nullable=True)
-    user_id = Column(String, nullable=True)  # Supabase auth user UUID (null if joined without account)
+    user_id = Column(String, nullable=True)
 
     chit_fund = relationship("ChitFund", back_populates="members")
+    payments = relationship("Payment", back_populates="member", cascade="all, delete-orphan")
 
 
 class DrawResult(Base):
@@ -86,3 +67,19 @@ class DrawResult(Base):
     drawn_at = Column(DateTime(timezone=True), server_default=func.now())
 
     chit_fund = relationship("ChitFund", back_populates="draws")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    chit_fund_id = Column(String, ForeignKey("chit_funds.id"), nullable=False)
+    member_id = Column(String, ForeignKey("members.id"), nullable=False)
+    month = Column(Integer, nullable=False)
+    amount = Column(Integer, nullable=False)
+    is_paid = Column(Boolean, default=False)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    marked_by = Column(String, nullable=True)
+
+    chit_fund = relationship("ChitFund", back_populates="payments")
+    member = relationship("Member", back_populates="payments")
