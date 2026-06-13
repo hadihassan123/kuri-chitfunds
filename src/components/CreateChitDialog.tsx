@@ -109,7 +109,7 @@ export function CreateChitDialog({ open, onOpenChange, onSuccess }: CreateChitDi
 
       form.setValue(
         'organizerName',
-        user.user_metadata?.full_name || ''
+        user.user_metadata?.name || ''
       );
 
       form.setValue(
