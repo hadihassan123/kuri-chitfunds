@@ -86,6 +86,11 @@ export default function Login() {
           <Button className="w-full" onClick={handleLogin} disabled={loading}>
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
+          <p className="text-center text-sm mt-2">
+            <Link to="/forgot-password" className="text-primary underline">
+              Forgot password?
+            </Link>
+          </p>
 
           <p className="text-center text-sm text-muted-foreground">
             Don't have an account?{' '}
