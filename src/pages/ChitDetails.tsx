@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, PlayCircle, Users, Calendar, Crown, Info, Copy, Check, Share2 } from 'lucide-react';
+import { ArrowLeft, Plus, PlayCircle, Users, Calendar, Crown, Info, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,38 +13,43 @@ import { AddMemberDialog } from '@/components/AddMemberDialog';
 import { DrawDialog } from '@/components/DrawDialog';
 import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
-import { ChitFund } from '@/types/chit';
+import { ChitFund, Payment } from '@/types/chit';
 import { format } from 'date-fns';
-import { Payment } from '@/types/chit';
+import { supabase } from '@/lib/supabase';
 
-// At the top, add to imports:
-
-// Add this component inside ChitDetails.tsx:
 function PaymentsTab({ chit, currentUserId }: { chit: ChitFund; currentUserId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
 
   useEffect(() => {
-    api.getPayments(chit.id).then(setPayments);
+    api.getPayments(chit.id).then(setPayments).catch(console.error);
   }, [chit.id]);
 
-  const isOrganizer = chit.organizerd === currentUserId;
-  const currentMonthPayments = payments.filter(p => p.month === chit.currentMonth - 1);
+  const isOrganizer = chit.organizerId === currentUserId;
+  const currentMonthPayments = payments.filter(p => p.month === (chit.currentMonth ?? 1) - 1);
 
   const handlePayUPI = () => {
-    const upiUrl = `upi://pay?pa=${chit.organizer_upi}&pn=Kuri&am=${chit.monthly_amount}&cu=INR&tn=Kuri+Month+${chit.currentMonth - 1}`;
+    const upiUrl = `upi://pay?pa=${chit.organizerUpi}&pn=Kuri&am=${chit.monthlyAmount}&cu=INR&tn=Kuri+Month+${(chit.currentMonth ?? 1) - 1}`;
     window.location.href = upiUrl;
   };
 
   const handleMarkPaid = async (paymentId: string) => {
-    await api.markPaid(chit.id, paymentId);
-    const updated = await api.getPayments(chit.id);
-    setPayments(updated);
+    try {
+      await api.markPaid(chit.id, paymentId);
+      const updated = await api.getPayments(chit.id);
+      setPayments(updated);
+    } catch (error: any) {
+      toast({ title: 'Failed to mark paid', description: error?.message, variant: 'destructive' });
+    }
   };
 
   const handleMarkUnpaid = async (paymentId: string) => {
-    await api.markUnpaid(chit.id, paymentId);
-    const updated = await api.getPayments(chit.id);
-    setPayments(updated);
+    try {
+      await api.markUnpaid(chit.id, paymentId);
+      const updated = await api.getPayments(chit.id);
+      setPayments(updated);
+    } catch (error: any) {
+      toast({ title: 'Failed to mark unpaid', description: error?.message, variant: 'destructive' });
+    }
   };
 
   return (
@@ -54,14 +59,14 @@ function PaymentsTab({ chit, currentUserId }: { chit: ChitFund; currentUserId: s
       ) : (
         currentMonthPayments.map(payment => {
           const member = chit.members.find(m => m.id === payment.member_id);
-          const isOwnPayment = member?.user_id === currentUserId;
+          const isOwnPayment = member?.id === currentUserId;
 
           return (
             <div key={payment.id} className="flex items-center justify-between rounded-lg border p-4">
               <div>
                 <p className="font-medium">{member?.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  ₹{payment.amount} — Month {payment.month}
+                  {chit.currency} {payment.amount} — Month {payment.month}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -76,7 +81,7 @@ function PaymentsTab({ chit, currentUserId }: { chit: ChitFund; currentUserId: s
                   </>
                 ) : (
                   <>
-                    {isOwnPayment && chit.organizer_upi && (
+                    {isOwnPayment && chit.organizerUpi && (
                       <Button size="sm" onClick={handlePayUPI}>
                         Pay via UPI
                       </Button>
@@ -104,7 +109,13 @@ export default function ChitDetails() {
   const [loading, setLoading] = useState(true);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [drawDialogOpen, setDrawDialogOpen] = useState(false);
-  const currentUserId = localStorage.getItem('userId') || '';
+  const [currentUserId, setCurrentUserId] = useState('');
+
+  useEffect(() => {
+    supabase?.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
+  }, []);
 
   const loadChit = async () => {
     if (!id) return;
@@ -112,8 +123,13 @@ export default function ChitDetails() {
     try {
       const data = await api.getChit(id);
       setChit(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load chit:', error);
+      toast({
+        title: 'Failed to load chit',
+        description: error?.message || 'Please refresh the page.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -164,7 +180,7 @@ export default function ChitDetails() {
   const getCurrencySymbol = (code: string): string => {
     const symbols: Record<string, string> = {
       INR: '₹', USD: '$', GBP: '£', EUR: '€',
-      AED: 'د.إ', SGD: 'S$', AUD: 'A$', CAD: 'C$'
+      AED: 'د.إ', SGD: 'S$', AUD: 'A$', CAD: 'C$',
     };
     return symbols[code] || code;
   };
@@ -181,21 +197,19 @@ export default function ChitDetails() {
   const organizer = chit.members.find(m => m.id === chit.organizerId);
   const totalValue = chit.monthlyAmount * chit.totalMembers;
   const canAddMembers = chit.status === 'draft' && chit.members.length < chit.totalMembers;
-  const canDraw = chit.status === 'active' && chit.currentMonth <= chit.durationMonths;
+  const canDraw = chit.status === 'active' && (chit.currentMonth ?? 0) <= chit.durationMonths;
   const membersNeeded = chit.totalMembers - chit.members.length;
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container py-8">
-        {/* Back Button */}
         <Button variant="ghost" className="mb-6" onClick={() => navigate('/')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Dashboard
         </Button>
 
-        {/* Chit Header */}
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-8">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -248,19 +262,17 @@ export default function ChitDetails() {
           </div>
         </div>
 
-        {/* Status Alert */}
         {chit.status === 'draft' && membersNeeded > 0 && (
           <Alert className="mb-6">
             <Info className="h-4 w-4" />
             <AlertTitle>Waiting for Members</AlertTitle>
             <AlertDescription>
-              {membersNeeded} more member{membersNeeded > 1 ? 's' : ''} needed to start the chit. 
+              {membersNeeded} more member{membersNeeded > 1 ? 's' : ''} needed to start the chit.
               Once all {chit.totalMembers} members join, the chit will automatically become active.
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="pt-6">
@@ -292,16 +304,14 @@ export default function ChitDetails() {
                 {chit.status === 'active' ? 'Current Month' : 'Duration'}
               </p>
               <p className="text-2xl font-bold">
-                {chit.status === 'active' 
+                {chit.status === 'active'
                   ? `${chit.currentMonth}/${chit.durationMonths}`
-                  : `${chit.durationMonths} months`
-                }
+                  : `${chit.durationMonths} months`}
               </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Organizer Rule Info */}
         <Card className="mb-6 border-primary/20 bg-primary/5">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
@@ -309,24 +319,23 @@ export default function ChitDetails() {
               <div>
                 <p className="font-medium">Organizer Win Rule</p>
                 <p className="text-sm text-muted-foreground">
-                  {chit.organizerWinsFirst 
+                  {chit.organizerWinsFirst
                     ? `${organizer?.name} (organizer) will receive the chit in the first month`
-                    : `${organizer?.name} (organizer) will receive the chit in the last month`
-                  }
+                    : `${organizer?.name} (organizer) will receive the chit in the last month`}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        
-
-        {/* Tabs */}
         <Tabs defaultValue="members" className="space-y-6">
           <TabsList>
             <TabsTrigger value="members" className="gap-2">
               <Users className="h-4 w-4" />
               Members ({chit.members.length})
+            </TabsTrigger>
+            <TabsTrigger value="payments">
+              Payments
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               History ({chit.draws.length})
@@ -336,11 +345,10 @@ export default function ChitDetails() {
           <TabsContent value="members">
             <MembersList chit={chit} onUpdate={loadChit} />
           </TabsContent>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-            // ...
-            <TabsContent value="payments">
-              <PaymentsTab chit={chit} currentUserId={currentUserId} />
-            </TabsContent>
+
+          <TabsContent value="payments">
+            <PaymentsTab chit={chit} currentUserId={currentUserId} />
+          </TabsContent>
 
           <TabsContent value="history">
             <DrawHistory chit={chit} />
