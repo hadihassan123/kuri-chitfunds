@@ -1,10 +1,11 @@
-import { ChitFund, Member, DrawResult, CreateChitPayload, AddMemberPayload, Payment } from '@/types/chit';
+import { ChitFund, Member, DrawResult, CreateChitPayload, AddMemberPayload } from '@/types/chit';
 import { supabase } from './supabase';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const FASTAPI_TIMEOUT_MS = 5000;
+const STORAGE_KEY = 'chitfunds_data';
+const FASTAPI_TIMEOUT_MS = 20000;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,9 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
     throw err;
   }
 }
+fetch(API_BASE_URL, { method: 'GET' }).catch(() => {});
 
+/** Get auth headers with Supabase JWT token */
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   try {
@@ -69,18 +72,6 @@ function mapDraw(raw: Record<string, unknown>): DrawResult {
   };
 }
 
-function mapPayment(raw: Record<string, unknown>): Payment {
-  return {
-    id: raw.id as string,
-    member_id: raw.member_id as string,
-    month: raw.month as number,
-    amount: raw.amount as number,
-    is_paid: raw.is_paid as boolean,
-    paid_at: raw.paid_at as string | null,
-    marked_by: raw.marked_by as string | null,
-  };
-}
-
 function mapChit(raw: Record<string, unknown>): ChitFund {
   const members = Array.isArray(raw.members)
     ? (raw.members as Record<string, unknown>[]).map(mapMember)
@@ -88,6 +79,7 @@ function mapChit(raw: Record<string, unknown>): ChitFund {
   const draws = Array.isArray(raw.draws)
     ? (raw.draws as Record<string, unknown>[]).map(mapDraw)
     : [];
+
   return {
     id: raw.id as string,
     name: raw.name as string,
@@ -99,7 +91,6 @@ function mapChit(raw: Record<string, unknown>): ChitFund {
     currentMonth: (raw.current_month ?? raw.currentMonth) as number,
     organizerId: (raw.organizer_id ?? raw.organizerId) as string,
     organizerWinsFirst: (raw.organizer_wins_first ?? raw.organizerWinsFirst) as boolean,
-    organizerUpi: (raw.organizer_upi ?? raw.organizerUpi) as string | undefined,
     status: raw.status as 'draft' | 'active' | 'completed',
     createdAt: (raw.created_at ?? raw.createdAt) as string,
     members,
@@ -107,55 +98,49 @@ function mapChit(raw: Record<string, unknown>): ChitFund {
   };
 }
 
-// ─── FastAPI client (Tier 1) ──────────────────────────────────────────────────
+// ─── localStorage (Tier 3 — offline only) ─────────────────────────────────────
 
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const authHeaders = await getAuthHeaders();
-  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
-    headers: authHeaders,
-    ...options,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'API error');
-  }
-  return res.json();
+function getStoredChits(): ChitFund[] {
+  const data = localStorage.getItem(STORAGE_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+function saveChits(chits: ChitFund[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(chits));
+}
+
+function syncToLocal(chits: ChitFund[]): void {
+  saveChits(chits);
 }
 
 // ─── Supabase direct queries (Tier 2) ─────────────────────────────────────────
 
 async function supabaseGetChits(): Promise<ChitFund[]> {
   if (!supabase) throw new Error('Supabase not configured');
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('Not authenticated');
 
   const { data: chits, error: chitError } = await supabase
     .from('chit_funds')
     .select('*')
-    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (chitError) throw chitError;
-  if (!chits || chits.length === 0) return [];
-
-  const chitIds = (chits as Record<string, unknown>[]).map(c => c.id as string);
 
   const { data: members, error: memberError } = await supabase
     .from('members')
-    .select('*')
-    .in('chit_fund_id', chitIds);
+    .select('*');
+
   if (memberError) throw memberError;
 
   const { data: draws, error: drawError } = await supabase
     .from('draw_results')
-    .select('*')
-    .in('chit_fund_id', chitIds);
+    .select('*');
+
   if (drawError) throw drawError;
 
   return (chits as Record<string, unknown>[]).map(chit => mapChit({
     ...chit,
-    members: (members as Record<string, unknown>[] || []).filter(m => m.chit_fund_id === chit.id),
-    draws: (draws as Record<string, unknown>[] || []).filter(d => d.chit_fund_id === chit.id),
+    members: (members as Record<string, unknown>[]).filter(m => m.chit_fund_id === chit.id),
+    draws: (draws as Record<string, unknown>[]).filter(d => d.chit_fund_id === chit.id),
   }));
 }
 
@@ -167,6 +152,7 @@ async function supabaseGetChit(id: string): Promise<ChitFund | null> {
     .select('*')
     .eq('id', id)
     .single();
+
   if (error) throw error;
 
   const { data: members } = await supabase
@@ -188,9 +174,8 @@ async function supabaseGetChit(id: string): Promise<ChitFund | null> {
 
 async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund> {
   if (!supabase) throw new Error('Supabase not configured');
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('Not authenticated');
 
+  const userId = await getCurrentUserId();
   const chitId = generateId();
   const organizerId = generateId();
 
@@ -202,16 +187,14 @@ async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund>
     currency: payload.currency,
     total_members: payload.totalMembers,
     duration_months: payload.durationMonths,
-    organizer_id: organizerId,   // just a text field, no FK constraint
-    organizer_upi: payload.organizerUpi,
+    organizer_id: organizerId,
     organizer_wins_first: payload.organizerWinsFirst,
     status: 'draft',
     current_month: 0,
-    user_id: userId,
+    user_id: userId,  // ← link to logged-in user
   });
-  if (chitError) throw new Error(`Chit insert failed: ${chitError.message}`);
+  if (chitError) throw chitError;
 
-  // Now insert member — chit exists so FK on chit_fund_id is satisfied
   const { error: memberError } = await supabase.from('members').insert({
     id: organizerId,
     chit_fund_id: chitId,
@@ -219,20 +202,17 @@ async function supabaseCreateChit(payload: CreateChitPayload): Promise<ChitFund>
     email: payload.organizerEmail,
     country: payload.organizerCountry,
     has_won: false,
-    user_id: userId,
+    user_id: userId,  // ← organizer is also a member
   });
-  if (memberError) {
-    // Rollback chit
-    await supabase.from('chit_funds').delete().eq('id', chitId);
-    throw new Error(`Member insert failed: ${memberError.message}`);
-  }
+  if (memberError) throw memberError;
 
   return (await supabaseGetChit(chitId))!;
 }
 
 async function supabaseAddMember(chitId: string, payload: AddMemberPayload): Promise<Member> {
   if (!supabase) throw new Error('Supabase not configured');
-  const userId = await getCurrentUserId();
+
+  const userId = await getCurrentUserId(); // null if not logged in
 
   const chit = await supabaseGetChit(chitId);
   if (!chit) throw new Error('Chit not found');
@@ -248,7 +228,7 @@ async function supabaseAddMember(chitId: string, payload: AddMemberPayload): Pro
     phone: payload.phone,
     country: payload.country,
     has_won: false,
-    user_id: userId,
+    user_id: userId,  // ← null if joined without account
   });
   if (error) throw error;
 
@@ -287,14 +267,15 @@ async function supabaseConductDraw(chitId: string): Promise<DrawResult> {
   const chit = await supabaseGetChit(chitId);
   if (!chit) throw new Error('Chit not found');
   if (chit.status !== 'active') throw new Error('Chit is not active');
-  if (chit.currentMonth! > chit.durationMonths) throw new Error('All draws completed');
+  if (chit.currentMonth > chit.durationMonths) throw new Error('All draws completed');
 
-  const eligible = chit.members.filter(m => !m.hasWon);
+  let eligible = chit.members.filter(m => !m.hasWon);
   const organizer = chit.members.find(m => m.id === chit.organizerId)!;
   const isFirst = chit.currentMonth === 1;
   const isLast = chit.currentMonth === chit.durationMonths;
 
   let winner: Member;
+
   if (chit.organizerWinsFirst && isFirst && !organizer.hasWon) {
     winner = organizer;
   } else if (!chit.organizerWinsFirst && isLast && !organizer.hasWon) {
@@ -315,7 +296,7 @@ async function supabaseConductDraw(chitId: string): Promise<DrawResult> {
   }).eq('id', winner.id);
 
   const drawId = generateId();
-  const newMonth = chit.currentMonth! + 1;
+  const newMonth = chit.currentMonth + 1;
   const newStatus = newMonth > chit.durationMonths ? 'completed' : 'active';
 
   await supabase.from('draw_results').insert({
@@ -340,31 +321,67 @@ async function supabaseConductDraw(chitId: string): Promise<DrawResult> {
   return mapDraw(draw as Record<string, unknown>);
 }
 
-// ─── Main API (2-tier: FastAPI → Supabase) ────────────────────────────────────
+// ─── FastAPI helpers (Tier 1) ─────────────────────────────────────────────────
+
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+    headers: authHeaders,
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'API error');
+  }
+  return res.json();
+}
+
+// ─── Main API (3-tier fallback) ───────────────────────────────────────────────
 
 export const api = {
 
   async getChits(): Promise<ChitFund[]> {
+    // Tier 1: FastAPI
     try {
       const data = await apiFetch<Record<string, unknown>[]>('/api/chits');
-      return data.map(mapChit);
+      const chits = data.map(mapChit);
+      syncToLocal(chits);
+      return chits;
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      return supabaseGetChits();
+      console.warn('FastAPI unavailable, trying Supabase:', e);
     }
+    // Tier 2: Supabase
+    try {
+      const chits = await supabaseGetChits();
+      syncToLocal(chits);
+      return chits;
+    } catch (e) {
+      console.warn('Supabase unavailable, using localStorage:', e);
+    }
+    // Tier 3: localStorage
+    return getStoredChits();
   },
 
   async getChit(id: string): Promise<ChitFund | null> {
+    // Tier 1: FastAPI
     try {
       const data = await apiFetch<Record<string, unknown>>(`/api/chits/${id}`);
       return mapChit(data);
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      return supabaseGetChit(id);
+      console.warn('FastAPI unavailable, trying Supabase:', e);
     }
+    // Tier 2: Supabase
+    try {
+      return await supabaseGetChit(id);
+    } catch (e) {
+      console.warn('Supabase unavailable, using localStorage:', e);
+    }
+    // Tier 3: localStorage
+    return getStoredChits().find(c => c.id === id) || null;
   },
 
   async createChit(payload: CreateChitPayload): Promise<ChitFund> {
+    // Tier 1: FastAPI
     try {
       const body = {
         name: payload.name,
@@ -377,7 +394,6 @@ export const api = {
         organizer_email: payload.organizerEmail,
         organizer_country: payload.organizerCountry,
         organizer_wins_first: payload.organizerWinsFirst,
-        organizer_upi: payload.organizerUpi,
       };
       const data = await apiFetch<Record<string, unknown>>('/api/chits', {
         method: 'POST',
@@ -385,70 +401,46 @@ export const api = {
       });
       return mapChit(data);
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      return supabaseCreateChit(payload);
+      console.warn('FastAPI unavailable, trying Supabase:', e);
     }
-  },
-
-  async getPayments(chitId: string): Promise<Payment[]> {
+    // Tier 2: Supabase
     try {
-      const data = await apiFetch<Record<string, unknown>[]>(`/api/chits/${chitId}/payments`);
-      return data.map(mapPayment);
+      return await supabaseCreateChit(payload);
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      if (!supabase) throw new Error('Supabase not configured');
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('chit_fund_id', chitId);
-      if (error) throw error;
-      return (data as Record<string, unknown>[]).map(mapPayment);
+      console.warn('Supabase unavailable, using localStorage:', e);
     }
-  },
-
-  async markPaid(chitId: string, paymentId: string): Promise<Payment> {
-    try {
-      const data = await apiFetch<Record<string, unknown>>(
-        `/api/chits/${chitId}/payments/${paymentId}/mark-paid`,
-        { method: 'PATCH' }
-      );
-      return mapPayment(data);
-    } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      if (!supabase) throw new Error('Supabase not configured');
-      const { data, error } = await supabase
-        .from('payments')
-        .update({ is_paid: true, paid_at: new Date().toISOString(), marked_by: 'organizer' })
-        .eq('id', paymentId)
-        .select()
-        .single();
-      if (error) throw error;
-      return mapPayment(data as Record<string, unknown>);
-    }
-  },
-
-  async markUnpaid(chitId: string, paymentId: string): Promise<Payment> {
-    try {
-      const data = await apiFetch<Record<string, unknown>>(
-        `/api/chits/${chitId}/payments/${paymentId}/mark-unpaid`,
-        { method: 'PATCH' }
-      );
-      return mapPayment(data);
-    } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      if (!supabase) throw new Error('Supabase not configured');
-      const { data, error } = await supabase
-        .from('payments')
-        .update({ is_paid: false, paid_at: null, marked_by: null })
-        .eq('id', paymentId)
-        .select()
-        .single();
-      if (error) throw error;
-      return mapPayment(data as Record<string, unknown>);
-    }
+    // Tier 3: localStorage
+    const organizerId = generateId();
+    const newChit: ChitFund = {
+      id: generateId(),
+      name: payload.name,
+      description: payload.description,
+      monthlyAmount: payload.monthlyAmount,
+      currency: payload.currency,
+      totalMembers: payload.totalMembers,
+      durationMonths: payload.durationMonths,
+      currentMonth: 0,
+      organizerId,
+      organizerWinsFirst: payload.organizerWinsFirst,
+      members: [{
+        id: organizerId,
+        name: payload.organizerName,
+        email: payload.organizerEmail,
+        country: payload.organizerCountry,
+        hasWon: false,
+      }],
+      draws: [],
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+    };
+    const chits = getStoredChits();
+    chits.push(newChit);
+    saveChits(chits);
+    return newChit;
   },
 
   async addMember(chitId: string, payload: AddMemberPayload): Promise<Member> {
+    // Tier 1: FastAPI
     try {
       const data = await apiFetch<Record<string, unknown>>(`/api/chits/${chitId}/members`, {
         method: 'POST',
@@ -456,37 +448,116 @@ export const api = {
       });
       return mapMember(data);
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      return supabaseAddMember(chitId, payload);
+      console.warn('FastAPI unavailable, trying Supabase:', e);
     }
+    // Tier 2: Supabase
+    try {
+      return await supabaseAddMember(chitId, payload);
+    } catch (e) {
+      console.warn('Supabase unavailable, using localStorage:', e);
+    }
+    // Tier 3: localStorage
+    const chits = getStoredChits();
+    const chit = chits.find(c => c.id === chitId);
+    if (!chit) throw new Error('Chit not found');
+    if (chit.members.length >= chit.totalMembers) throw new Error('Maximum members reached');
+    const newMember: Member = { id: generateId(), ...payload, hasWon: false };
+    chit.members.push(newMember);
+    if (chit.members.length === chit.totalMembers) {
+      chit.status = 'active';
+      chit.currentMonth = 1;
+    }
+    saveChits(chits);
+    return newMember;
   },
 
   async removeMember(chitId: string, memberId: string): Promise<void> {
+    // Tier 1: FastAPI
     try {
       await apiFetch(`/api/chits/${chitId}/members/${memberId}`, { method: 'DELETE' });
+      return;
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      return supabaseRemoveMember(chitId, memberId);
+      console.warn('FastAPI unavailable, trying Supabase:', e);
     }
+    // Tier 2: Supabase
+    try {
+      await supabaseRemoveMember(chitId, memberId);
+      return;
+    } catch (e) {
+      console.warn('Supabase unavailable, using localStorage:', e);
+    }
+    // Tier 3: localStorage
+    const chits = getStoredChits();
+    const chit = chits.find(c => c.id === chitId);
+    if (!chit) throw new Error('Chit not found');
+    if (chit.status !== 'draft') throw new Error('Cannot remove members from active chit');
+    if (memberId === chit.organizerId) throw new Error('Cannot remove organizer');
+    chit.members = chit.members.filter(m => m.id !== memberId);
+    saveChits(chits);
   },
 
   async conductDraw(chitId: string): Promise<DrawResult> {
+    // Tier 1: FastAPI
     try {
       const data = await apiFetch<Record<string, unknown>>(`/api/chits/${chitId}/draw`, {
         method: 'POST',
       });
       return mapDraw(data);
     } catch (e) {
-      console.warn('FastAPI unavailable, using Supabase:', e);
-      return supabaseConductDraw(chitId);
+      console.warn('FastAPI unavailable, trying Supabase:', e);
     }
+    // Tier 2: Supabase
+    try {
+      return await supabaseConductDraw(chitId);
+    } catch (e) {
+      console.warn('Supabase unavailable, using localStorage:', e);
+    }
+    // Tier 3: localStorage
+    const chits = getStoredChits();
+    const chit = chits.find(c => c.id === chitId);
+    if (!chit) throw new Error('Chit not found');
+    if (chit.status !== 'active') throw new Error('Chit is not active');
+    if (chit.currentMonth > chit.durationMonths) throw new Error('All draws completed');
+    let eligible = chit.members.filter(m => !m.hasWon);
+    const organizer = chit.members.find(m => m.id === chit.organizerId)!;
+    const isFirst = chit.currentMonth === 1;
+    const isLast = chit.currentMonth === chit.durationMonths;
+    let winner: Member;
+    if (chit.organizerWinsFirst && isFirst && !organizer.hasWon) {
+      winner = organizer;
+    } else if (!chit.organizerWinsFirst && isLast && !organizer.hasWon) {
+      winner = organizer;
+    } else if (!chit.organizerWinsFirst && eligible.length === 1) {
+      winner = eligible[0];
+    } else {
+      let pool = eligible;
+      if (!chit.organizerWinsFirst && !organizer.hasWon) {
+        pool = eligible.filter(m => m.id !== chit.organizerId);
+      }
+      winner = pool[Math.floor(Math.random() * pool.length)];
+    }
+    const idx = chit.members.findIndex(m => m.id === winner.id);
+    chit.members[idx].hasWon = true;
+    chit.members[idx].wonInMonth = chit.currentMonth;
+    const draw: DrawResult = {
+      id: generateId(),
+      month: chit.currentMonth,
+      winnerId: winner.id,
+      winnerName: winner.name,
+      drawnAt: new Date().toISOString(),
+    };
+    chit.draws.push(draw);
+    chit.currentMonth++;
+    if (chit.currentMonth > chit.durationMonths) chit.status = 'completed';
+    saveChits(chits);
+    return draw;
   },
 
   async getEligibleMembers(chitId: string): Promise<Member[]> {
     const chit = await this.getChit(chitId);
     if (!chit) return [];
     let eligible = chit.members.filter(m => !m.hasWon);
-    if (!chit.organizerWinsFirst && chit.currentMonth! < chit.durationMonths) {
+    if (!chit.organizerWinsFirst && chit.currentMonth < chit.durationMonths) {
       eligible = eligible.filter(m => m.id !== chit.organizerId);
     }
     return eligible;
