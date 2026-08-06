@@ -1,0 +1,30 @@
+name: Keep Services Alive
+
+on:
+  schedule:
+    # Supabase free tier auto-pauses after 7 days with zero DB traffic.
+    - cron: '0 9 */5 * *'
+    # Render free tier spins down after ~15 min idle. Ping every 10 min
+    # to stay comfortably under that.
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {} # manual trigger from the Actions tab, runs both jobs
+
+jobs:
+  ping-supabase:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 9 */5 * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST endpoint
+        run: |
+          curl --fail --silent --show-error \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/chit_funds?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+
+  ping-render-backend:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/10 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render backend
+        run: |
+          curl --fail --silent --show-error "https://kuri-backend-0veb.onrender.com/"
