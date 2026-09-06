@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 import jwt
@@ -17,8 +16,8 @@ EXPECTED_AUDIENCE = "authenticated"
 _jwks_client = PyJWKClient(JWKS_URL)
 
 
-def get_user_id(request: Request) -> str:
-    """Verify a Supabase access token and return its authenticated user ID."""
+def get_current_user_id(request: Request) -> str:
+    """Verify the Supabase access token and return the authenticated user ID."""
     authorization = request.headers.get("Authorization", "")
     scheme, _, token = authorization.partition(" ")
 
