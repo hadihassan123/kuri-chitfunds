@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from auth import SUPABASE_ISSUER, _jwks_client, get_user_id
+from auth import SUPABASE_ISSUER, _jwks_client, get_current_user_id
 
 
 @pytest.fixture
@@ -55,14 +55,14 @@ def replace_header(token: str, **changes) -> str:
 
 def test_missing_authorization_returns_401():
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(None))
+        get_current_user_id(make_request(None))
     assert exc.value.status_code == 401
     assert exc.value.detail == "Authentication required"
 
 
 def test_malformed_token_returns_401():
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request("not-a-jwt"))
+        get_current_user_id(make_request("not-a-jwt"))
     assert exc.value.status_code == 401
 
 
@@ -70,7 +70,7 @@ def test_valid_es256_token_is_accepted(signing_keys):
     private_key, _ = signing_keys
     token = make_token(private_key)
 
-    user_id = get_user_id(make_request(token))
+    user_id = get_current_user_id(make_request(token))
 
     assert len(user_id) == 36
 
@@ -81,7 +81,7 @@ def test_wrong_signature_returns_401(signing_keys):
     token = make_token(attacker_key)
 
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(token))
+        get_current_user_id(make_request(token))
     assert exc.value.status_code == 401
 
 
@@ -95,7 +95,7 @@ def test_expired_token_returns_401(signing_keys):
     )
 
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(token))
+        get_current_user_id(make_request(token))
     assert exc.value.status_code == 401
 
 
@@ -104,7 +104,7 @@ def test_wrong_issuer_returns_401(signing_keys):
     token = make_token(private_key, iss="https://attacker.example/auth/v1")
 
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(token))
+        get_current_user_id(make_request(token))
     assert exc.value.status_code == 401
 
 
@@ -113,7 +113,7 @@ def test_wrong_audience_returns_401(signing_keys):
     token = make_token(private_key, aud="anon")
 
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(token))
+        get_current_user_id(make_request(token))
     assert exc.value.status_code == 401
 
 
@@ -122,7 +122,7 @@ def test_unsupported_algorithm_returns_401(signing_keys):
     token = replace_header(make_token(private_key), alg="RS256")
 
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(token))
+        get_current_user_id(make_request(token))
     assert exc.value.status_code == 401
 
 
@@ -131,5 +131,5 @@ def test_missing_subject_returns_401(signing_keys):
     token = make_token(private_key, sub=None)
 
     with pytest.raises(HTTPException) as exc:
-        get_user_id(make_request(token))
+        get_current_user_id(make_request(token))
     assert exc.value.status_code == 401
