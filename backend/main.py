@@ -161,17 +161,29 @@ def get_eligible_members(chit_id: str, user_id: str = Depends(get_current_user_i
 
 @app.post("/api/chits/{chit_id}/draw", response_model=DrawResultResponse)
 def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    chit = require_chit_organizer(chit_id, user_id, db)
+    # Serialize draws for a chit. PostgreSQL holds this row lock until commit/rollback,
+    # so concurrent requests cannot both advance the same current_month.
+    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).with_for_update().first()
+    if not chit:
+        raise HTTPException(status_code=404, detail="Chit fund not found")
+    if chit.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Organizer only")
     if chit.status != ChitStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Chit is not active")
     if chit.current_month > chit.duration_months:
         raise HTTPException(status_code=400, detail="All draws completed")
 
-    eligible = [m for m in chit.members if not m.has_won]
+    # Lock the member rows used by this draw so the winner state is evaluated and
+    # updated within the same transaction as the draw result and payments.
+    members = db.query(Member).filter(
+        Member.chit_fund_id == chit_id
+    ).with_for_update().all()
+
+    eligible = [m for m in members if not m.has_won]
     if not eligible:
         raise HTTPException(status_code=400, detail="No eligible members")
 
-    organizer = next((m for m in chit.members if m.id == chit.organizer_id), None)
+    organizer = next((m for m in members if m.id == chit.organizer_id), None)
     is_first_month = chit.current_month == 1
     is_last_month = chit.current_month == chit.duration_months
     winner = None
@@ -200,7 +212,7 @@ def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: 
     db.add(draw_result)
 
     month = chit.current_month
-    for member in chit.members:
+    for member in members:
         existing = db.query(Payment).filter(
             Payment.chit_fund_id == chit_id,
             Payment.member_id == member.id,
