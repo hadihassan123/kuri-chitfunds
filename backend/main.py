@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from sqlalchemy.sql import func
-from typing import List, Optional
+from typing import List
 import random
 
 from database import get_db, engine, Base
@@ -13,6 +13,7 @@ from schemas import (
     MemberCreate, MemberResponse, DrawResultResponse, PaymentResponse
 )
 from config import get_settings
+from auth import get_user_id
 
 Base.metadata.create_all(bind=engine)
 
@@ -29,23 +30,8 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"] ,
 )
-
-
-def get_user_id(request: Request) -> Optional[str]:
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return None
-    token = auth.split(" ")[1]
-    try:
-        import base64, json
-        payload_b64 = token.split(".")[1]
-        payload_b64 += "=" * (4 - len(payload_b64) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-        return payload.get("sub")
-    except Exception:
-        return None
 
 
 @app.get("/")
@@ -56,8 +42,6 @@ def read_root():
 @app.get("/api/chits", response_model=List[ChitFundListResponse])
 def get_chits(request: Request, db: Session = Depends(get_db)):
     user_id = get_user_id(request)
-    if not user_id:
-        return []
     chits = db.query(ChitFund).filter(
         or_(
             ChitFund.user_id == user_id,
@@ -80,8 +64,6 @@ def get_chit(chit_id: str, db: Session = Depends(get_db)):
 @app.post("/api/chits", response_model=ChitFundResponse)
 def create_chit(payload: ChitFundCreate, request: Request, db: Session = Depends(get_db)):
     user_id = get_user_id(request)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
 
     chit = ChitFund(
         name=payload.name,
@@ -268,8 +250,6 @@ def get_payments(chit_id: str, db: Session = Depends(get_db)):
 @app.patch("/api/chits/{chit_id}/payments/{payment_id}/mark-paid")
 def mark_paid(chit_id: str, payment_id: str, request: Request, db: Session = Depends(get_db)):
     user_id = get_user_id(request)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
 
     payment = db.query(Payment).filter(
         Payment.id == payment_id,
