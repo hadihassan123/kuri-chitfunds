@@ -95,7 +95,15 @@ def create_chit(payload: ChitFundCreate, user_id: str = Depends(get_current_user
 
 @app.post("/api/chits/{chit_id}/members", response_model=MemberResponse)
 def add_member(chit_id: str, payload: MemberCreate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    chit = require_chit_organizer(chit_id, user_id, db)
+    require_chit_organizer(chit_id, user_id, db)
+
+    # Lock the chit for the whole enrollment transaction so concurrent organizers
+    # cannot both observe the same remaining capacity and exceed total_members.
+    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).with_for_update().first()
+    if not chit:
+        raise HTTPException(status_code=404, detail="Chit fund not found")
+    if chit.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Organizer only")
     if chit.status != ChitStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Cannot add members to an active chit")
     if len(chit.members) >= chit.total_members:
@@ -173,8 +181,6 @@ def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: 
     if chit.current_month > chit.duration_months:
         raise HTTPException(status_code=400, detail="All draws completed")
 
-    # Lock the member rows used by this draw so the winner state is evaluated and
-    # updated within the same transaction as the draw result and payments.
     members = db.query(Member).filter(
         Member.chit_fund_id == chit_id
     ).with_for_update().all()
