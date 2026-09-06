@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -13,7 +13,7 @@ from schemas import (
     MemberCreate, MemberResponse, DrawResultResponse, PaymentResponse
 )
 from config import get_settings
-from auth import get_user_id
+from auth import get_current_user_id
 
 Base.metadata.create_all(bind=engine)
 
@@ -40,8 +40,7 @@ def read_root():
 
 
 @app.get("/api/chits", response_model=List[ChitFundListResponse])
-def get_chits(request: Request, db: Session = Depends(get_db)):
-    user_id = get_user_id(request)
+def get_chits(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chits = db.query(ChitFund).filter(
         or_(
             ChitFund.user_id == user_id,
@@ -62,9 +61,7 @@ def get_chit(chit_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/chits", response_model=ChitFundResponse)
-def create_chit(payload: ChitFundCreate, request: Request, db: Session = Depends(get_db)):
-    user_id = get_user_id(request)
-
+def create_chit(payload: ChitFundCreate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = ChitFund(
         name=payload.name,
         description=payload.description,
@@ -99,9 +96,7 @@ def create_chit(payload: ChitFundCreate, request: Request, db: Session = Depends
 
 
 @app.post("/api/chits/{chit_id}/members", response_model=MemberResponse)
-def add_member(chit_id: str, payload: MemberCreate, request: Request, db: Session = Depends(get_db)):
-    user_id = get_user_id(request)
-
+def add_member(chit_id: str, payload: MemberCreate, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
@@ -139,7 +134,7 @@ def add_member(chit_id: str, payload: MemberCreate, request: Request, db: Sessio
 
 
 @app.delete("/api/chits/{chit_id}/members/{member_id}")
-def remove_member(chit_id: str, member_id: str, db: Session = Depends(get_db)):
+def remove_member(chit_id: str, member_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
@@ -161,7 +156,7 @@ def remove_member(chit_id: str, member_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/chits/{chit_id}/eligible", response_model=List[MemberResponse])
-def get_eligible_members(chit_id: str, db: Session = Depends(get_db)):
+def get_eligible_members(chit_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
@@ -173,7 +168,7 @@ def get_eligible_members(chit_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/chits/{chit_id}/draw", response_model=DrawResultResponse)
-def conduct_draw(chit_id: str, db: Session = Depends(get_db)):
+def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
@@ -240,7 +235,7 @@ def conduct_draw(chit_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/chits/{chit_id}/payments", response_model=List[PaymentResponse])
-def get_payments(chit_id: str, db: Session = Depends(get_db)):
+def get_payments(chit_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
@@ -248,9 +243,7 @@ def get_payments(chit_id: str, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/chits/{chit_id}/payments/{payment_id}/mark-paid")
-def mark_paid(chit_id: str, payment_id: str, request: Request, db: Session = Depends(get_db)):
-    user_id = get_user_id(request)
-
+def mark_paid(chit_id: str, payment_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     payment = db.query(Payment).filter(
         Payment.id == payment_id,
         Payment.chit_fund_id == chit_id
@@ -276,8 +269,7 @@ def mark_paid(chit_id: str, payment_id: str, request: Request, db: Session = Dep
 
 
 @app.patch("/api/chits/{chit_id}/payments/{payment_id}/mark-unpaid")
-def mark_unpaid(chit_id: str, payment_id: str, request: Request, db: Session = Depends(get_db)):
-    user_id = get_user_id(request)
+def mark_unpaid(chit_id: str, payment_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
