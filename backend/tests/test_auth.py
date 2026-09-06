@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -42,6 +44,15 @@ def make_token(private_key, **overrides):
     return jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": "test-key"})
 
 
+def replace_header(token: str, **changes) -> str:
+    encoded_header, payload, signature = token.split(".")
+    padding = "=" * (-len(encoded_header) % 4)
+    header = json.loads(base64.urlsafe_b64decode(encoded_header + padding))
+    header.update(changes)
+    new_header = base64.urlsafe_b64encode(json.dumps(header, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    return f"{new_header}.{payload}.{signature}"
+
+
 def test_missing_authorization_returns_401():
     with pytest.raises(HTTPException) as exc:
         get_user_id(make_request(None))
@@ -65,7 +76,7 @@ def test_valid_es256_token_is_accepted(signing_keys):
 
 
 def test_wrong_signature_returns_401(signing_keys):
-    private_key, _ = signing_keys
+    _, _ = signing_keys
     attacker_key = ec.generate_private_key(ec.SECP256R1())
     token = make_token(attacker_key)
 
@@ -108,12 +119,7 @@ def test_wrong_audience_returns_401(signing_keys):
 
 def test_unsupported_algorithm_returns_401(signing_keys):
     private_key, _ = signing_keys
-    token = jwt.encode(
-        {"sub": str(uuid4()), "iss": SUPABASE_ISSUER, "aud": "authenticated"},
-        private_key,
-        algorithm="ES256",
-        headers={"kid": "test-key", "alg": "RS256"},
-    )
+    token = replace_header(make_token(private_key), alg="RS256")
 
     with pytest.raises(HTTPException) as exc:
         get_user_id(make_request(token))
