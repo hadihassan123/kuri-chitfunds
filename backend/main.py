@@ -237,14 +237,25 @@ def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: 
     if chit.current_month > chit.duration_months:
         raise HTTPException(status_code=400, detail="All draws completed")
 
+    month = chit.current_month
+    existing_draw = db.query(DrawResult.id).filter(
+        DrawResult.chit_fund_id == chit_id,
+        DrawResult.month == month,
+    ).first()
+    if existing_draw:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Draw already completed for month {month}",
+        )
+
     members = db.query(Member).filter(Member.chit_fund_id == chit_id).with_for_update().all()
     eligible = [m for m in members if not m.has_won]
     if not eligible:
         raise HTTPException(status_code=400, detail="No eligible members")
 
     organizer = next((m for m in members if m.id == chit.organizer_id), None)
-    is_first_month = chit.current_month == 1
-    is_last_month = chit.current_month == chit.duration_months
+    is_first_month = month == 1
+    is_last_month = month == chit.duration_months
     winner = None
 
     if chit.organizer_wins_first and is_first_month and organizer and not organizer.has_won:
@@ -260,12 +271,11 @@ def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: 
         winner = random.choice(pool) if pool else random.choice(eligible)
 
     winner.has_won = True
-    winner.won_in_month = chit.current_month
+    winner.won_in_month = month
 
     draw_result = DrawResult(chit_fund_id=chit.id, month=chit.current_month, winner_id=winner.id, winner_name=winner.name)
     db.add(draw_result)
 
-    month = chit.current_month
     for member in members:
         existing = db.query(Payment).filter(
             Payment.chit_fund_id == chit_id,
