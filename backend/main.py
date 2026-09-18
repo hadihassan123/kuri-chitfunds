@@ -226,7 +226,7 @@ def get_eligible_members(chit_id: str, user_id: str = Depends(get_current_user_i
 
 
 @app.post("/api/chits/{chit_id}/draw", response_model=DrawResultResponse)
-def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+def conduct_draw(chit_id: str, payload: DrawRequest, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).with_for_update().first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
@@ -238,6 +238,12 @@ def conduct_draw(chit_id: str, user_id: str = Depends(get_current_user_id), db: 
         raise HTTPException(status_code=400, detail="All draws completed")
 
     month = chit.current_month
+    if payload.expected_month != month:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Draw month is stale; current month is {month}",
+        )
+
     existing_draw = db.query(DrawResult.id).filter(
         DrawResult.chit_fund_id == chit_id,
         DrawResult.month == month,
