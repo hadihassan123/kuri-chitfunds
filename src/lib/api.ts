@@ -99,7 +99,51 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 }
 
 /** Supabase is used only for Auth/JWT retrieval; application data stays behind FastAPI. */
+export interface PublicInvitePreview {
+  id: string;
+  name: string;
+  description?: string;
+  monthlyAmount: number;
+  currency: string;
+  totalMembers: number;
+  durationMonths: number;
+  memberCount: number;
+  organizerName?: string;
+  organizerWinsFirst: boolean;
+  status: 'draft' | 'active' | 'completed';
+}
+
+function mapPublicInvite(raw: Raw): PublicInvitePreview {
+  return {
+    id: raw.id as string,
+    name: raw.name as string,
+    description: raw.description as string | undefined,
+    monthlyAmount: (raw.monthly_amount ?? raw.monthlyAmount) as number,
+    currency: raw.currency as string,
+    totalMembers: (raw.total_members ?? raw.totalMembers) as number,
+    durationMonths: (raw.duration_months ?? raw.durationMonths) as number,
+    memberCount: (raw.member_count ?? raw.memberCount) as number,
+    organizerName: (raw.organizer_name ?? raw.organizerName) as string | undefined,
+    organizerWinsFirst: (raw.organizer_wins_first ?? raw.organizerWinsFirst) as boolean,
+    status: raw.status as 'draft' | 'active' | 'completed',
+  };
+}
+
+async function getPublicInvite(id: string): Promise<PublicInvitePreview | null> {
+  const res = await fetchWithTimeout(API_BASE_URL + '/api/invites/' + id);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `API request failed (${res.status})`);
+  }
+  return mapPublicInvite(await res.json());
+}
+
 export const api = {
+  async getPublicInvite(id: string): Promise<PublicInvitePreview | null> {
+    return getPublicInvite(id);
+  },
+
   async getChits(): Promise<ChitFund[]> {
     const data = await apiFetch<Raw[]>('/api/chits');
     return data.map(mapChit);

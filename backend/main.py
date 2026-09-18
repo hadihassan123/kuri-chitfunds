@@ -10,7 +10,7 @@ from database import get_db, engine, Base
 from models import ChitFund, Member, DrawResult, Payment, ChitStatus
 from schemas import (
     ChitFundCreate, ChitFundResponse, ChitFundListResponse,
-    MemberCreate, MemberResponse, MembershipClaimResponse, DrawResultResponse, PaymentResponse
+    MemberCreate, MemberResponse, MembershipClaimResponse, PublicInviteResponse, DrawResultResponse, PaymentResponse
 )
 from config import get_settings
 from auth import get_current_user_id, get_current_user_email
@@ -49,6 +49,31 @@ def get_chits(user_id: str = Depends(get_current_user_id), db: Session = Depends
         )
     ).all()
     return chits
+
+
+@app.get("/api/invites/{chit_id}", response_model=PublicInviteResponse)
+def get_public_invite(chit_id: str, db: Session = Depends(get_db)):
+    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
+    if not chit:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    organizer = db.query(Member).filter(
+        Member.id == chit.organizer_id,
+        Member.chit_fund_id == chit_id,
+    ).first()
+    member_count = db.query(Member.id).filter(Member.chit_fund_id == chit_id).count()
+    return PublicInviteResponse(
+        id=chit.id,
+        name=chit.name,
+        description=chit.description,
+        monthly_amount=chit.monthly_amount,
+        currency=chit.currency,
+        total_members=chit.total_members,
+        duration_months=chit.duration_months,
+        member_count=member_count,
+        organizer_name=organizer.name if organizer else None,
+        organizer_wins_first=chit.organizer_wins_first,
+        status=chit.status,
+    )
 
 
 @app.get("/api/chits/{chit_id}", response_model=ChitFundResponse)

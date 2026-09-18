@@ -43,6 +43,20 @@ class MemberResponse(BaseModel):
         from_attributes = True
 
 
+class PublicInviteResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    monthly_amount: int
+    currency: str
+    total_members: int
+    duration_months: int
+    member_count: int
+    organizer_name: Optional[str]
+    organizer_wins_first: bool
+    status: ChitStatusEnum
+
+
 class MembershipClaimResponse(BaseModel):
     member_id: str
     chit_id: str

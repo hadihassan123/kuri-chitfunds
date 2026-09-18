@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { Coins, Users, Calendar, Crown, UserPlus, CheckCircle2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,23 +13,35 @@ import { MembersList } from '@/components/MembersList';
 import { DrawHistory } from '@/components/DrawHistory';
 import { api } from '@/lib/api';
 import { ChitFund } from '@/types/chit';
+import { PublicInvitePreview } from '@/lib/api';
 
 export default function JoinChit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const [publicInvite, setPublicInvite] = useState<PublicInvitePreview | null>(null);
   const [chit, setChit] = useState<ChitFund | null>(null);
   const [loading, setLoading] = useState(true);
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
 
   const loadChit = async () => {
-    if (!id) return;
+    if (!id || authLoading) return;
     setLoading(true);
     try {
-      const data = await api.getChit(id);
-      setChit(data);
+      const preview = await api.getPublicInvite(id);
+      setPublicInvite(preview);
+      if (!preview) {
+        setChit(null);
+        return;
+      }
+      if (user) {
+        const data = await api.getChit(id);
+        setChit(data);
+      }
     } catch (error) {
-      console.error('Failed to load chit:', error);
+      console.error('Failed to load invite:', error);
+      setChit(null);
     } finally {
       setLoading(false);
     }
@@ -36,7 +49,7 @@ export default function JoinChit() {
 
   useEffect(() => {
     loadChit();
-  }, [id]);
+  }, [id, user, authLoading]);
 
   const getCurrencySymbol = (code: string): string => {
     const symbols: Record<string, string> = {
@@ -66,6 +79,73 @@ export default function JoinChit() {
             <div className="h-8 bg-muted rounded w-1/2" />
             <div className="h-48 bg-muted rounded" />
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ─── Public preview for unauthenticated invite visitors ───────────────────
+
+  if (!user && publicInvite) {
+    const totalValue = publicInvite.monthlyAmount * publicInvite.totalMembers;
+    const spotsLeft = publicInvite.totalMembers - publicInvite.memberCount;
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container py-8 max-w-lg mx-auto">
+          <Card>
+            <CardHeader className="text-center">
+              <div className="mx-auto w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <Coins className="h-7 w-7 text-primary" />
+              </div>
+              <CardTitle className="text-2xl">{publicInvite.name}</CardTitle>
+              {publicInvite.description && <CardDescription>{publicInvite.description}</CardDescription>}
+              <Badge variant="outline" className={getStatusColor(publicInvite.status)}>
+                {publicInvite.status.charAt(0).toUpperCase() + publicInvite.status.slice(1)}
+              </Badge>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Monthly</p>
+                  <p className="text-lg font-bold">{getCurrencySymbol(publicInvite.currency)}{publicInvite.monthlyAmount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Total Pot</p>
+                  <p className="text-lg font-bold text-primary">{getCurrencySymbol(publicInvite.currency)}{totalValue.toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Members</p>
+                  <p className="text-lg font-bold">{publicInvite.memberCount}/{publicInvite.totalMembers}</p>
+                </div>
+                <div className="rounded-lg border p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Duration</p>
+                  <p className="text-lg font-bold">{publicInvite.durationMonths} months</p>
+                </div>
+              </div>
+              {publicInvite.organizerName && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Crown className="h-4 w-4 text-yellow-500" />
+                  <span>Organized by <span className="font-medium text-foreground">{publicInvite.organizerName}</span></span>
+                </div>
+              )}
+              <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                {publicInvite.organizerWinsFirst
+                  ? 'The organizer receives the chit in the first month.'
+                  : 'The organizer receives the chit in the last month.'}
+              </div>
+              {publicInvite.status === 'draft' && spotsLeft > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-center text-muted-foreground">{spotsLeft} spot{spotsLeft > 1 ? 's' : ''} remaining</p>
+                  <Button className="w-full" size="lg" onClick={() => navigate('/login')}>
+                    Sign in to join this Kuri
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-center text-muted-foreground">This Kuri is not currently accepting new members.</p>
+              )}
+            </CardContent>
+          </Card>
         </main>
       </div>
     );
