@@ -51,6 +51,10 @@ class MembershipClaimResponse(BaseModel):
     email: str
 
 
+class DrawRequest(BaseModel):
+    expected_month: int = Field(ge=1)
+
+
 class DrawResultResponse(BaseModel):
     id: str
     month: int
