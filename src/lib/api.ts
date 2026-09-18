@@ -140,7 +140,11 @@ async function getPublicInvite(id: string): Promise<PublicInvitePreview | null> 
 }
 
 export const api = {
-  async getPublicInvite(id: string): Promise<PublicInvitePreview | null> {\n    return getPublicInvite(id);\n  },\n\n  async getChits(): Promise<ChitFund[]> {
+  async getPublicInvite(id: string): Promise<PublicInvitePreview | null> {
+    return getPublicInvite(id);
+  },
+
+  async getChits(): Promise<ChitFund[]> {
     const data = await apiFetch<Raw[]>('/api/chits');
     return data.map(mapChit);
   },
