@@ -55,7 +55,7 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
 
     try {
       // Conduct draw on backend first to get winner
-      const result = await api.conductDraw(chit.id);
+      const result = await api.conductDraw(chit.id, chit.currentMonth);
       const winningMember = eligibleMembers.find(m => m.id === result.winnerId);
       
       if (!winningMember) {
