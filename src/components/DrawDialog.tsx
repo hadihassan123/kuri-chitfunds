@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
@@ -28,6 +28,7 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
   const [winner, setWinner] = useState<Member | null>(null);
   const [drawResult, setDrawResult] = useState<DrawResult | null>(null);
   const [showResult, setShowResult] = useState(false);
+  const drawLockRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -36,6 +37,7 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
       setDrawResult(null);
       setShowResult(false);
       setIsSpinning(false);
+      drawLockRef.current = false;
     }
   }, [open, chit.id]);
 
@@ -45,11 +47,15 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
   };
 
   const handleSpin = async () => {
-    if (isSpinning) return;
+    // The ref closes the race window before the async request starts.
+    if (drawLockRef.current) return;
+
+    drawLockRef.current = true;
+    setIsSpinning(true);
 
     try {
       // Conduct draw on backend first to get winner
-      const result = await api.conductDraw(chit.id);
+      const result = await api.conductDraw(chit.id, chit.currentMonth);
       const winningMember = eligibleMembers.find(m => m.id === result.winnerId);
       
       if (!winningMember) {
@@ -58,8 +64,11 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
 
       setWinner(winningMember);
       setDrawResult(result);
-      setIsSpinning(true);
     } catch (error) {
+      // Release the lock only when the draw request failed so the user
+      // can retry without allowing duplicate successful requests.
+      drawLockRef.current = false;
+      setIsSpinning(false);
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to conduct draw.',
