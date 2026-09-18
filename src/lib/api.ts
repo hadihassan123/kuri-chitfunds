@@ -160,8 +160,11 @@ export const api = {
     return data.map(mapMember);
   },
 
-  async conductDraw(chitId: string): Promise<DrawResult> {
-    return mapDraw(await apiFetch<Raw>(`/api/chits/${chitId}/draw`, { method: 'POST' }));
+  async conductDraw(chitId: string, expectedMonth: number): Promise<DrawResult> {
+    return mapDraw(await apiFetch<Raw>(`/api/chits/${chitId}/draw`, {
+      method: 'POST',
+      body: JSON.stringify({ expected_month: expectedMonth }),
+    }));
   },
 
   async getPayments(chitId: string): Promise<Payment[]> {
