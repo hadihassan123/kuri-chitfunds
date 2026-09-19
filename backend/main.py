@@ -16,8 +16,6 @@ from config import get_settings
 from auth import get_current_user_id, get_current_user_email
 from authz import get_chit_for_user, require_chit_organizer
 
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="ChitFund API",
     description="Backend API for Digital Chit Fund Management",
