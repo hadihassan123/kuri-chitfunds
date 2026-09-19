@@ -1,9 +1,3 @@
-import os
-
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test_draw_guard.db")
-os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
-
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
