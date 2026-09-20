@@ -1,54 +1,8 @@
-import os
-
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test_draw_guard.db")
-os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
-
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from database import Base, get_db
+from database import Base
 from models import ChitFund, Member, ChitStatus, DrawResult
-from main import app
-from auth import get_current_user_id
-
-TEST_ENGINE = create_engine(
-    "sqlite://",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(bind=TEST_ENGINE, autoflush=False, autocommit=False)
-Base.metadata.create_all(bind=TEST_ENGINE)
 
 
-def override_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def override_user(user_id):
-    def dependency():
-        return user_id
-    return dependency
-
-
-app.dependency_overrides[get_db] = override_db
-app.dependency_overrides[get_current_user_id] = override_user("organizer-1")
-client = TestClient(app)
-
-
-def reset_db():
-    Base.metadata.drop_all(bind=TEST_ENGINE)
-    Base.metadata.create_all(bind=TEST_ENGINE)
-
-
-def seed_active_kuri():
-    db = TestingSessionLocal()
+def seed_active_kuri(db):
     chit = ChitFund(
         name="Draw Guard Kuri",
         monthly_amount=1000,
@@ -81,15 +35,11 @@ def seed_active_kuri():
         ),
     ])
     db.commit()
-    db.refresh(chit)
-    chit_id = chit.id
-    db.close()
-    return chit_id
+    return chit.id
 
 
-def test_stale_draw_request_cannot_advance_to_next_month():
-    reset_db()
-    chit_id = seed_active_kuri()
+def test_stale_draw_request_cannot_advance_to_next_month(client, test_db):
+    chit_id = seed_active_kuri(test_db)
 
     first = client.post(
         f"/api/chits/{chit_id}/draw",
@@ -105,9 +55,7 @@ def test_stale_draw_request_cannot_advance_to_next_month():
     assert second.status_code == 409
     assert "stale" in second.json()["detail"]
 
-    db = TestingSessionLocal()
-    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).one()
-    draws = db.query(DrawResult).filter(DrawResult.chit_fund_id == chit_id).all()
+    chit = test_db.query(ChitFund).filter(ChitFund.id == chit_id).one()
+    draws = test_db.query(DrawResult).filter(DrawResult.chit_fund_id == chit_id).all()
     assert chit.current_month == 2
     assert len(draws) == 1
-    db.close()
