@@ -10,7 +10,8 @@ from database import get_db, engine, Base
 from models import ChitFund, Member, DrawResult, Payment, ChitStatus
 from schemas import (
     ChitFundCreate, ChitFundResponse, ChitFundListResponse,
-    MemberCreate, MemberResponse, MembershipClaimResponse, PublicInviteResponse, DrawResultResponse, PaymentResponse
+    MemberCreate, MemberResponse, MembershipClaimResponse, PublicInviteResponse,
+    DrawRequest, DrawResultResponse, PaymentResponse
 )
 from config import get_settings
 from auth import get_current_user_id, get_current_user_email
