@@ -82,6 +82,10 @@ def seed_active_kuri():
 
 
 def test_stale_draw_request_cannot_advance_to_next_month():
+    # This module owns a separate SQLite engine; restore its DB override because
+    # another test module may have replaced the shared FastAPI override.
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user_id] = override_user("organizer-1")
     reset_db()
     chit_id = seed_active_kuri()
 
