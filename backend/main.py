@@ -229,7 +229,7 @@ def remove_member(chit_id: str, member_id: str, user_id: str = Depends(get_curre
     if member_id == chit.organizer_id:
         raise HTTPException(status_code=400, detail="Cannot remove the organizer")
 
-    member = db.query(Member).filter(Member.id == member_id, Member.chit_fund_id == chit_id).first()
+    member = db.query(Member).filter(Member.id == member_id, Member.chit_fund_id == chit_id).with_for_update().first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
 
@@ -369,12 +369,10 @@ def get_payments(chit_id: str, user_id: str = Depends(get_current_user_id), db: 
 
 @app.patch("/api/chits/{chit_id}/payments/{payment_id}/mark-paid")
 def mark_paid(chit_id: str, payment_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(Payment.id == payment_id, Payment.chit_fund_id == chit_id).first()
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
+    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).with_for_update().first()
     if not chit:
         raise HTTPException(status_code=404, detail="Chit fund not found")
+    payment = db.query(Payment).filter(Payment.id == payment_id, Payment.chit_fund_id == chit_id).with_for_update().first()
     is_organizer = chit.user_id == user_id
     member = db.query(Member).filter(Member.id == payment.member_id, Member.chit_fund_id == chit_id).first()
     is_own_payment = member is not None and member.user_id == user_id
