@@ -48,6 +48,7 @@ export interface ChitFund {
   organizerUpi?: string;
   members: Member[];
   draws: DrawResult[];
+  nextDrawAt?: string;
   status: 'draft' | 'active' | 'completed';
   createdAt: string;
 }
