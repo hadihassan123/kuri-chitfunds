@@ -72,6 +72,7 @@ function mapChit(raw: Raw): ChitFund {
     createdAt: (raw.created_at ?? raw.createdAt) as string,
     members: Array.isArray(raw.members) ? raw.members.map((m) => mapMember(m as Raw)) : [],
     draws: Array.isArray(raw.draws) ? raw.draws.map((d) => mapDraw(d as Raw)) : [],
+    nextDrawAt: raw.next_draw_at as string | undefined,
   };
 }
 
