@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,7 +57,7 @@ def get_chits(user_id: str = Depends(get_current_user_id), db: Session = Depends
 
 
 @app.get("/api/invites/{chit_id}", response_model=PublicInviteResponse)
-def get_public_invite(chit_id: str, db: Session = Depends(get_db)):
+def get_public_invite(chit_id: str = Path(min_length=15, max_length=15), db: Session = Depends(get_db)):
     chit = db.query(ChitFund).filter(ChitFund.id == chit_id).first()
     if not chit:
         raise HTTPException(status_code=404, detail="Invite not found")
@@ -111,7 +111,7 @@ def get_pending_memberships(
 
 @app.post("/api/memberships/{member_id}/claim", response_model=MembershipClaimResponse)
 def claim_membership(
-    member_id: str,
+    member_id: str = Path(min_length=15, max_length=15),
     user_id: str = Depends(get_current_user_id),
     email: str = Depends(get_current_user_email),
     db: Session = Depends(get_db),
