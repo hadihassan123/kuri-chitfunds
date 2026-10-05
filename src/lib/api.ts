@@ -93,7 +93,16 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `API request failed (${res.status})`);
+    const detail = Array.isArray(error?.detail)
+      ? error.detail.map((item: Raw) => {
+          const loc = Array.isArray(item.loc) ? item.loc.join('.') : 'request';
+          return `${loc}: ${String(item.msg ?? 'validation error')}`;
+        }).join('; ')
+      : String(error?.detail || `API request failed (${res.status})`);
+    const requestId = typeof error?.request_id === 'string'
+      ? error.request_id
+      : res.headers.get('X-Request-ID');
+    throw new Error(requestId ? `${detail} (Request ID: ${requestId})` : detail);
   }
   return res.json() as Promise<T>;
 }
