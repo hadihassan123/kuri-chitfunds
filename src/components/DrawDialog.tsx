@@ -125,12 +125,17 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
             <Trophy className="h-5 w-5 text-yellow-500" />
             Monthly Draw - Month {chit.currentMonth}
           </DialogTitle>
-          <DialogDescription>
-            Spin the wheel to select this month's winner!
+          <DialogDescription id="draw-instructions">
+            Spin the wheel to select this month's winner. The selected winner will also be announced for screen readers.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col items-center py-6">
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {isSpinning && 'Selecting a winner.'}
+            {!isSpinning && showResult && winner && drawResult &&
+              `Winner: ${winner.name}. Month ${drawResult.month} of ${chit.durationMonths}.`}
+          </div>
           {eligibleMembers.length > 0 ? (
             <>
               <SpinWheel
