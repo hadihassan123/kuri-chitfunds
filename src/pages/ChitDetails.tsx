@@ -200,7 +200,15 @@ export default function ChitDetails() {
   const organizer = chit.members.find(m => m.id === chit.organizerId);
   const totalValue = chit.monthlyAmount * chit.totalMembers;
   const canAddMembers = chit.status === 'draft' && chit.members.length < chit.totalMembers;
-  const canDraw = chit.status === 'active' && (chit.currentMonth ?? 0) <= chit.durationMonths;
+  const lastDrawAt = chit.draws.length > 0
+    ? Math.max(...chit.draws.map(draw => new Date(draw.drawnAt).getTime()))
+    : null;
+  const nextDrawAt = lastDrawAt !== null ? lastDrawAt + 30 * 24 * 60 * 60 * 1000 : null;
+  const drawEligible = nextDrawAt === null || Date.now() >= nextDrawAt;
+  const canDraw =
+    chit.status === 'active' &&
+    (chit.currentMonth ?? 0) <= chit.durationMonths &&
+    drawEligible;
   const membersNeeded = chit.totalMembers - chit.members.length;
 
   return (
@@ -261,6 +269,11 @@ export default function ChitDetails() {
                 <PlayCircle className="mr-2 h-4 w-4" />
                 Conduct Draw
               </Button>
+            )}
+            {chit.status === 'active' && !drawEligible && nextDrawAt !== null && (
+              <div className="text-sm text-muted-foreground flex items-center">
+                Next draw available {format(new Date(nextDrawAt), 'PPp')}
+              </div>
             )}
           </div>
         </div>
