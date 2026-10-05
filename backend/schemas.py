@@ -24,10 +24,10 @@ class PaymentResponse(BaseModel):
 
 
 class MemberCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     email: EmailStr
-    phone: Optional[str] = None
-    country: str
+    phone: Optional[str] = Field(default=None, max_length=20)
+    country: str = Field(min_length=1, max_length=100)
 
 
 class MemberResponse(BaseModel):
@@ -81,16 +81,16 @@ class DrawResultResponse(BaseModel):
 
 
 class ChitFundCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
     monthly_amount: int = Field(gt=0)
-    currency: str = "INR"
+    currency: str = Field(default="INR", min_length=1, max_length=10)
     total_members: int = Field(ge=2, le=20)
-    organizer_name: str
+    organizer_name: str = Field(min_length=1, max_length=100)
     organizer_email: EmailStr
-    organizer_country: str
+    organizer_country: str = Field(min_length=1, max_length=100)
     organizer_wins_first: bool = True
-    organizer_upi: Optional[str] = None
+    organizer_upi: Optional[str] = Field(default=None, max_length=100)
 
     @property
     def duration_months(self) -> int:
