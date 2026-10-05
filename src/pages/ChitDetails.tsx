@@ -206,10 +206,10 @@ export default function ChitDetails() {
   const organizer = chit.members.find(m => m.id === chit.organizerId);
   const totalValue = chit.monthlyAmount * chit.totalMembers;
   const canAddMembers = chit.status === 'draft' && chit.members.length < chit.totalMembers;
+  const nextDrawAt = chit.nextDrawAt ? new Date(chit.nextDrawAt).getTime() : null;
   const lastDrawAt = chit.draws.length > 0
     ? Math.max(...chit.draws.map(draw => new Date(draw.drawnAt).getTime()))
     : null;
-  const nextDrawAt = lastDrawAt !== null ? lastDrawAt + 30 * 24 * 60 * 60 * 1000 : null;
   const drawEligible = nextDrawAt === null || now >= nextDrawAt;
   const canDraw =
     chit.status === 'active' &&
