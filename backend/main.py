@@ -10,6 +10,7 @@ import logging
 import random
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from database import get_db, engine, Base
 from models import ChitFund, Member, DrawResult, Payment, ChitStatus
@@ -282,6 +283,31 @@ def conduct_draw(chit_id: str, payload: DrawRequest, user_id: str = Depends(get_
             status_code=409,
             detail=f"Draw already completed for month {month}",
         )
+
+    # Enforce a strict 30 * 24-hour period between successful draws.
+    # The previous draw timestamp is authoritative; the client clock is not.
+    last_draw = (
+        db.query(DrawResult)
+        .filter(DrawResult.chit_fund_id == chit_id)
+        .order_by(DrawResult.drawn_at.desc())
+        .first()
+    )
+    if last_draw and last_draw.drawn_at:
+        last_draw_at = last_draw.drawn_at
+        if last_draw_at.tzinfo is None:
+            last_draw_at = last_draw_at.replace(tzinfo=timezone.utc)
+
+        next_draw_at = last_draw_at + timedelta(days=30)
+        now = datetime.now(timezone.utc)
+        if now < next_draw_at:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Draw is not yet eligible. "
+                    f"The previous draw was completed at {last_draw_at.isoformat()}; "
+                    f"the next draw is available at {next_draw_at.isoformat()}."
+                ),
+            )
 
     members = db.query(Member).filter(Member.chit_fund_id == chit_id).with_for_update().all()
     eligible = [m for m in members if not m.has_won]
