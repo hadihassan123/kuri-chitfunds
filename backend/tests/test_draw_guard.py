@@ -33,6 +33,7 @@ def seed_active_kuri(db):
             name="Member 2",
             email="member2@example.com",
             country="IN",
+            user_id="member-2",
         ),
     ])
     db.commit()
