@@ -115,6 +115,7 @@ class ChitFundResponse(BaseModel):
     members: List[MemberResponse]
     draws: List[DrawResultResponse]
     payments: List[PaymentResponse]
+    next_draw_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
