@@ -1,4 +1,5 @@
-from conftest import override_user, seed_active_kuri
+from conftest import override_user
+from test_draw_guard import seed_active_kuri
 from main import app
 from auth import get_current_user_id
 from models import ChitFund
