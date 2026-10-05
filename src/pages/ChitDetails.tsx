@@ -112,6 +112,12 @@ export default function ChitDetails() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [drawDialogOpen, setDrawDialogOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState('');
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     supabase?.auth.getUser().then(({ data: { user } }) => {
@@ -204,7 +210,7 @@ export default function ChitDetails() {
     ? Math.max(...chit.draws.map(draw => new Date(draw.drawnAt).getTime()))
     : null;
   const nextDrawAt = lastDrawAt !== null ? lastDrawAt + 30 * 24 * 60 * 60 * 1000 : null;
-  const drawEligible = nextDrawAt === null || Date.now() >= nextDrawAt;
+  const drawEligible = nextDrawAt === null || now >= nextDrawAt;
   const canDraw =
     chit.status === 'active' &&
     (chit.currentMonth ?? 0) <= chit.durationMonths &&
@@ -271,8 +277,9 @@ export default function ChitDetails() {
               </Button>
             )}
             {chit.status === 'active' && !drawEligible && nextDrawAt !== null && (
-              <div className="text-sm text-muted-foreground flex items-center">
-                Next draw available {format(new Date(nextDrawAt), 'PPp')}
+              <div className="rounded-lg border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">Next draw available</div>
+                <div>{format(new Date(nextDrawAt), 'PPp')}</div>
               </div>
             )}
           </div>
@@ -285,6 +292,18 @@ export default function ChitDetails() {
             <AlertDescription>
               {membersNeeded} more member{membersNeeded > 1 ? 's' : ''} needed to start the chit.
               Once all {chit.totalMembers} members join, the chit will automatically become active.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {chit.status === 'active' && nextDrawAt !== null && !drawEligible && (
+          <Alert className="mb-6">
+            <Calendar className="h-4 w-4" />
+            <AlertTitle>Draw waiting period</AlertTitle>
+            <AlertDescription>
+              The previous draw was completed on {format(new Date(lastDrawAt!), 'PPp')}.
+              The next draw becomes available after the strict 30-day waiting period,
+              on {format(new Date(nextDrawAt), 'PPp')}.
             </AlertDescription>
           </Alert>
         )}
