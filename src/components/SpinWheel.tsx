@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Member } from '@/types/chit';
 
 interface SpinWheelProps {
@@ -24,6 +24,7 @@ const COLORS = [
 
 export function SpinWheel({ members, winner, isSpinning, onSpinComplete }: SpinWheelProps) {
   const [rotation, setRotation] = useState(0);
+  const prefersReducedMotion = useReducedMotion();
   const wheelRef = useRef<SVGSVGElement>(null);
 
   const segmentAngle = 360 / members.length;
@@ -39,8 +40,11 @@ export function SpinWheel({ members, winner, isSpinning, onSpinComplete }: SpinW
       
       setRotation(finalRotation);
       
-      // Trigger completion after animation
-      setTimeout(onSpinComplete, 4000);
+      // Keep the result accessible without forcing users who prefer reduced motion
+      // to wait through the full visual animation.
+      const completionDelay = prefersReducedMotion ? 0 : 4000;
+      const timer = window.setTimeout(onSpinComplete, completionDelay);
+      return () => window.clearTimeout(timer);
     }
   }, [isSpinning, winner]);
 
@@ -88,10 +92,11 @@ export function SpinWheel({ members, winner, isSpinning, onSpinComplete }: SpinW
         viewBox="0 0 350 350"
         animate={{ rotate: rotation }}
         transition={{ 
-          duration: 4, 
+          duration: prefersReducedMotion ? 0 : 4, 
           ease: [0.2, 0.8, 0.2, 1] 
         }}
         className="drop-shadow-2xl"
+        aria-hidden="true"
       >
         {/* Outer ring */}
         <circle cx="175" cy="175" r="165" fill="none" stroke="hsl(var(--border))" strokeWidth="4" />
