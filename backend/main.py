@@ -376,7 +376,7 @@ def mark_paid(chit_id: str, payment_id: str, user_id: str = Depends(get_current_
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
     is_organizer = chit.user_id == user_id
-    member = db.query(Member).filter(Member.id == payment.member_id, Member.chit_fund_id == chit_id).first()
+    member = db.query(Member).filter(Member.id == payment.member_id, Member.chit_fund_id == chit_id).with_for_update().first()
     is_own_payment = member is not None and member.user_id == user_id
     if not is_organizer and not is_own_payment:
         raise HTTPException(status_code=403, detail="Not authorized")
