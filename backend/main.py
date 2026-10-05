@@ -223,7 +223,12 @@ def add_member(chit_id: str, payload: MemberCreate, user_id: str = Depends(get_c
 
 @app.delete("/api/chits/{chit_id}/members/{member_id}")
 def remove_member(chit_id: str, member_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    chit = require_chit_organizer(chit_id, user_id, db)
+    require_chit_organizer(chit_id, user_id, db)
+    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).with_for_update().first()
+    if not chit:
+        raise HTTPException(status_code=404, detail="Chit fund not found")
+    if chit.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Organizer only")
     if chit.status != ChitStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Cannot remove members from an active chit")
     if member_id == chit.organizer_id:
@@ -240,7 +245,12 @@ def remove_member(chit_id: str, member_id: str, user_id: str = Depends(get_curre
 
 @app.delete("/api/chits/{chit_id}")
 def delete_chit(chit_id: str, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    chit = require_chit_organizer(chit_id, user_id, db)
+    require_chit_organizer(chit_id, user_id, db)
+    chit = db.query(ChitFund).filter(ChitFund.id == chit_id).with_for_update().first()
+    if not chit:
+        raise HTTPException(status_code=404, detail="Chit fund not found")
+    if chit.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Organizer only")
     db.delete(chit)
     db.commit()
     return {"message": "Chit fund deleted successfully"}
