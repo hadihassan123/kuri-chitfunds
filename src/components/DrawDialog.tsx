@@ -54,9 +54,22 @@ export function DrawDialog({ open, onOpenChange, chit, onSuccess }: DrawDialogPr
     setIsSpinning(true);
 
     try {
-      // Conduct draw on backend first to get winner
-      const result = await api.conductDraw(chit.id, chit.currentMonth);
-      const winningMember = eligibleMembers.find(m => m.id === result.winnerId);
+      // Re-read authoritative state immediately before drawing.
+      // The dialog can stay open while another request or tab advances the month.
+      const latestChit = await api.getChit(chit.id);
+      if (!latestChit) throw new Error('Chit fund not found');
+      const latestEligibleMembers = await api.getEligibleMembers(chit.id);
+      setEligibleMembers(latestEligibleMembers);
+
+      if (latestChit.status !== 'active') {
+        throw new Error(`Chit is not active (status: ${latestChit.status})`);
+      }
+      if (latestChit.currentMonth > latestChit.durationMonths) {
+        throw new Error('All draws have already been completed');
+      }
+
+      const result = await api.conductDraw(chit.id, latestChit.currentMonth);
+      const winningMember = latestEligibleMembers.find(m => m.id === result.winnerId);
       
       if (!winningMember) {
         throw new Error('Winner not found in eligible members');
