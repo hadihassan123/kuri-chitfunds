@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from database import Base
 import enum
 import uuid
+from datetime import timedelta
 
 
 def generate_uuid():
@@ -46,6 +47,13 @@ class ChitFund(Base):
     members = relationship("Member", back_populates="chit_fund", cascade="all, delete-orphan")
     draws = relationship("DrawResult", back_populates="chit_fund", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="chit_fund", cascade="all, delete-orphan")
+
+    @property
+    def next_draw_at(self):
+        if not self.draws:
+            return None
+        last_draw = max(self.draws, key=lambda draw: draw.drawn_at)
+        return last_draw.drawn_at + timedelta(days=30) if last_draw.drawn_at else None
 
 
 class Member(Base):
